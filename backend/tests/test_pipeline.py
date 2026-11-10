@@ -6,7 +6,9 @@ import os
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.models.dispute import Dispute, DisputeReason, DisputeStatus, DisputeLifeCycleStage, DisputedTransaction, Money, BuyerInfo
+from app.models.dispute import (
+    Dispute, DisputeReason, DisputeStatus, DisputeLifeCycleStage, DisputedTransaction, Money, BuyerInfo, CardScheme
+)
 from app.models.evidence import EvidencePackage, TrackingInfo, HistoricalTransaction
 from app.agents.orchestrator import shield_orchestrator
 from app.models.agent_response import DefenseAction
@@ -27,7 +29,8 @@ async def run_tests():
         reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_RECEIVED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
         dispute_amount=Money(value="149.00"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK,
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.VISA,
         buyer_info=BuyerInfo(
             shipping_address={"postal_code": "94107"}
         )
@@ -63,7 +66,9 @@ async def run_tests():
         reason=DisputeReason.UNAUTHORISED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
         dispute_amount=Money(value="250.00"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK,
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.VISA,
+        scheme_reason_code="10.4",
         buyer_info=BuyerInfo(
             ip_address="192.0.2.1"
         )
@@ -93,27 +98,55 @@ async def run_tests():
     assert dossier_ce30.triage.win_probability == 98.0
     print(f"✓ Test 2 Passed: CE 3.0 Qualified = {dossier_ce30.compliance.visa_ce30_eligible}")
 
-    print("\n--- Running Test 3: Micro-Dispute Triage (Auto-Concede) ---")
-    dispute_micro = Dispute(
-        dispute_id="TEST-MICRO-01",
+    print("\n--- Running Test 3: Mastercard Prior Contact Rule Violation (Barclays Flow) ---")
+    dispute_mc = Dispute(
+        dispute_id="TEST-MC-01",
         create_time=datetime.utcnow(),
         disputed_transactions=[
             DisputedTransaction(
-                transaction_id="TXN-003",
-                gross_amount=Money(value="15.00"),
+                transaction_id="TXN-MC-01",
+                gross_amount=Money(value="180.00"),
                 create_time=datetime.utcnow()
             )
         ],
         reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
-        dispute_amount=Money(value="15.00"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK
+        dispute_amount=Money(value="180.00"),
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.MASTERCARD,
+        scheme_reason_code="4853",
+        buyer_contacted_merchant=False  # Violation
     )
-    dossier_micro = await shield_orchestrator.defend_dispute(dispute_micro, EvidencePackage(dispute_id="TEST-MICRO-01"))
-    assert dossier_micro.triage.recommended_action == DefenseAction.AUTO_CONCEDE
-    print(f"✓ Test 3 Passed: Action = {dossier_micro.triage.recommended_action}")
+    dossier_mc = await shield_orchestrator.defend_dispute(dispute_mc)
+    assert dossier_mc.compliance.procedural_defect_identified is True
+    assert dossier_mc.triage.recommended_action == DefenseAction.DEFEND
+    print(f"✓ Test 3 Passed: Procedural Defect Caught = {dossier_mc.compliance.procedural_defect_identified}")
 
-    print("\nAll 3 Core Defense Pipeline Tests Passed Successfully! 🚀")
+    print("\n--- Running Test 4: Scheme Arbitration Risk & Day N-1 Critical Alert ---")
+    dispute_arb = Dispute(
+        dispute_id="TEST-ARB-01",
+        create_time=datetime.utcnow() - timedelta(days=30),
+        disputed_transactions=[
+            DisputedTransaction(
+                transaction_id="TXN-ARB-01",
+                gross_amount=Money(value="60.00"),
+                create_time=datetime.utcnow() - timedelta(days=35)
+            )
+        ],
+        reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED,
+        status=DisputeStatus.UNDER_REVIEW,
+        dispute_amount=Money(value="60.00"),
+        dispute_life_cycle_stage=DisputeLifeCycleStage.SCHEME_ARBITRATION,
+        scheme=CardScheme.VISA,
+        seller_response_due_date=datetime.utcnow() + timedelta(hours=12)  # Day N-1!
+    )
+    dossier_arb = await shield_orchestrator.defend_dispute(dispute_arb)
+    assert dossier_arb.triage.sla_urgency_tier == "CRITICAL_DAY_N_MINUS_1"
+    assert dossier_arb.triage.recommended_action == DefenseAction.CONCEDE_ARBITRATION
+    assert dossier_arb.triage.arbitration_risk.go_decision is False
+    print(f"✓ Test 4 Passed: Action = {dossier_arb.triage.recommended_action}, SLA = {dossier_arb.triage.sla_urgency_tier}")
+
+    print("\nAll 4 Core Defense & Scheme Compliance Tests Passed Successfully! 🚀")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Eye,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Clock,
+  Scale
 } from 'lucide-react';
 
 export default function App() {
@@ -22,9 +24,12 @@ export default function App() {
       id: "PP-D-83921",
       amount: "$149.99",
       reason: "Item Not Received (INR)",
+      scheme: "VISA",
+      stage: "MERCHANT_REPRESENTMENT",
       buyer: "John Doe",
       status: "DEFENDED",
       winProb: 92,
+      slaUrgency: "NORMAL",
       recommendation: "DEFEND",
       summary: "USPS tracking #9400111899562537628192 confirms delivery to verified postal code 94107 with signature.",
       ce30: false,
@@ -35,9 +40,12 @@ export default function App() {
       id: "PP-D-99104",
       amount: "$320.00",
       reason: "Unauthorized Payment (Fraud 10.4)",
+      scheme: "VISA",
+      stage: "MERCHANT_REPRESENTMENT",
       buyer: "Sarah Jenkins",
       status: "DEFENDED",
       winProb: 98,
+      slaUrgency: "NORMAL",
       recommendation: "DEFEND",
       summary: "Visa CE 3.0 matched 2 prior settled transactions (140d & 210d ago) sharing IP 203.0.113.195. Liability shifts to issuer.",
       ce30: true,
@@ -45,15 +53,36 @@ export default function App() {
       time: "5 hours ago"
     },
     {
-      id: "PP-D-10294",
-      amount: "$12.50",
-      reason: "Significantly Not As Described",
-      buyer: "Mike Ross",
-      status: "CONCEDED",
-      winProb: 38,
-      recommendation: "AUTO_CONCEDE",
-      summary: "Micro-chargeback below economic defense threshold without carrier POD. Auto-conceded to save $20 network fee.",
+      id: "PP-D-77218",
+      amount: "$189.50",
+      reason: "Not as Described (Mastercard 4853)",
+      scheme: "MASTERCARD",
+      stage: "MERCHANT_REPRESENTMENT",
+      buyer: "David Miller",
+      status: "DEFENDED",
+      winProb: 96,
+      slaUrgency: "NORMAL",
+      recommendation: "DEFEND",
+      summary: "Mastercard Rule Defect: Cardholder failed to attempt prior merchant resolution before chargeback. Procedural defect identified.",
       ce30: false,
+      proceduralDefect: true,
+      podVerified: false,
+      time: "8 hours ago"
+    },
+    {
+      id: "PP-D-55102",
+      amount: "$75.00",
+      reason: "Defective Merchandise (Escalated)",
+      scheme: "VISA",
+      stage: "SCHEME_ARBITRATION",
+      buyer: "Emma Watson",
+      status: "CONCEDED",
+      winProb: 35,
+      slaUrgency: "CRITICAL_DAY_N_MINUS_1",
+      recommendation: "CONCEDE_ARBITRATION",
+      summary: "Stage 9 Scheme Arbitration: $500 network fee risk yields negative expected value (-$310.00). Conceded to avoid fee penalty.",
+      ce30: false,
+      arbitrationAvoided: true,
       podVerified: false,
       time: "1 day ago"
     }
@@ -70,12 +99,17 @@ export default function App() {
           id: data.dispute.dispute_id,
           amount: `$${data.dispute.dispute_amount.value}`,
           reason: data.dispute.reason,
+          scheme: data.dispute.scheme || "VISA",
+          stage: data.dispute.dispute_life_cycle_stage,
           buyer: data.dispute.buyer_info?.name || "Customer",
           status: newDossier.triage.recommended_action === "DEFEND" ? "DEFENDED" : "CONCEDED",
           winProb: newDossier.triage.win_probability,
+          slaUrgency: newDossier.triage.sla_urgency_tier,
           recommendation: newDossier.triage.recommended_action,
           summary: newDossier.defense_summary,
           ce30: newDossier.compliance.visa_ce30_eligible,
+          proceduralDefect: newDossier.compliance.procedural_defect_identified,
+          arbitrationAvoided: newDossier.triage.recommended_action === "CONCEDE_ARBITRATION",
           podVerified: newDossier.forensics.pod_verified,
           time: "Just now",
           rawDossier: newDossier
@@ -83,7 +117,7 @@ export default function App() {
         setDisputes(prev => [newDispute, ...prev]);
         setSelectedDispute(newDispute);
       } else {
-        alert("Simulation triggered! Note: Run FastAPI backend at localhost:8000 for live data.");
+        alert("Simulation triggered! Run backend at localhost:8000 for live data.");
       }
     } catch (e) {
       alert("Simulation endpoint triggered. Connect backend for live streaming!");
@@ -103,9 +137,9 @@ export default function App() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="font-bold text-lg text-white tracking-tight">ShieldAgent</h1>
-              <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">PayPal AI Edition</span>
+              <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">PayPal AI Hackathon</span>
             </div>
-            <p className="text-xs text-slate-400">Autonomous Dispute Defense & Visa CE 3.0 Compliance</p>
+            <p className="text-xs text-slate-400">Card Scheme Lifecycle (Visa & Mastercard) & Automated Representment</p>
           </div>
         </div>
 
@@ -139,83 +173,89 @@ export default function App() {
               <TrendingUp className="w-4 h-4 text-blue-400" />
             </div>
             <div className="mt-2 flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-white">91.4%</span>
+              <span className="text-2xl font-bold text-white">93.2%</span>
               <span className="text-xs text-slate-400">vs 41% baseline</span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Powered by CE 3.0 & carrier POD</p>
+            <p className="mt-1 text-xs text-slate-500">Boosted by Visa CE 3.0 & Mastercard Rules</p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
             <div className="flex justify-between items-start">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Friendly Fraud Blocked</span>
-              <ShieldCheck className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Arbitration Fees Saved</span>
+              <Scale className="w-4 h-4 text-purple-400" />
             </div>
             <div className="mt-2 flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-white">$31,200</span>
-              <span className="text-xs text-emerald-400 font-semibold">72.8%</span>
+              <span className="text-2xl font-bold text-white">$8,500</span>
+              <span className="text-xs text-emerald-400 font-semibold">17 cases</span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Triangulated via POD & IP history</p>
+            <p className="mt-1 text-xs text-slate-500">Avoided $500 network penalties via Stage 9 EV</p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
             <div className="flex justify-between items-start">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Dispute Fees Saved</span>
-              <Cpu className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">SLA Deadlines Protected</span>
+              <Clock className="w-4 h-4 text-amber-400" />
             </div>
             <div className="mt-2 flex items-baseline space-x-2">
-              <span className="text-2xl font-bold text-white">$2,480</span>
-              <span className="text-xs text-slate-400">124 claims</span>
+              <span className="text-2xl font-bold text-white">100%</span>
+              <span className="text-xs text-slate-400">0 default losses</span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Auto-conceded micro-disputes</p>
+            <p className="mt-1 text-xs text-slate-500">Automated Day N-1 critical warnings</p>
           </div>
         </div>
 
-        {/* Simulation Sandbox Panel */}
+        {/* Scheme Lifecycle Simulations */}
         <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/40 to-slate-900 border border-blue-900/30 rounded-xl p-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center">
                 <Cpu className="w-4 h-4 mr-2 text-blue-400" />
-                Dispute Simulation Testbench
+                Scheme Dispute Testbench (Visa & Mastercard)
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Simulate inbound PayPal webhooks and watch the multi-agent defense council evaluate evidence in real-time.
+                Test the 10-stage lifecycle, Visa CE 3.0 liability shift, Mastercard procedural checks, and Stage 9 arbitration risk.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button 
                 onClick={() => triggerSimulation('friendly-fraud-inr')}
                 disabled={loading}
-                className="px-3 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm flex items-center"
+                className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm"
               >
-                1. Test INR Friendly Fraud
+                1. INR POD
               </button>
               <button 
                 onClick={() => triggerSimulation('visa-ce30-liability-shift')}
                 disabled={loading}
-                className="px-3 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-sm flex items-center"
+                className="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-sm"
               >
-                2. Test Visa CE 3.0 Match
+                2. Visa CE 3.0
               </button>
               <button 
-                onClick={() => triggerSimulation('unwinnable-micro-chargeback')}
+                onClick={() => triggerSimulation('mastercard-missing-contact')}
                 disabled={loading}
-                className="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition shadow-sm flex items-center"
+                className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition shadow-sm"
               >
-                3. Test Auto-Concede
+                3. Mastercard Prior Contact
+              </button>
+              <button 
+                onClick={() => triggerSimulation('scheme-arbitration-risk')}
+                disabled={loading}
+                className="px-3 py-1.5 text-xs font-medium bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition shadow-sm"
+              >
+                4. Scheme Arbitration Risk ($500)
               </button>
             </div>
           </div>
         </div>
 
-        {/* Main Content: Dispute Feed & Dossier Inspector */}
+        {/* Main Feed & Dossier Viewer */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Dispute Stream (7 cols) */}
           <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-semibold text-sm text-white flex items-center">
                 <FileText className="w-4 h-4 mr-2 text-slate-400" />
-                Live Inbound Disputes & Defense Stream
+                Dispute Lifecycle Feed (Barclays / Scheme Rails)
               </h3>
               <span className="text-xs text-slate-500">{disputes.length} disputes</span>
             </div>
@@ -232,20 +272,29 @@ export default function App() {
                   <div className="space-y-1 pr-4">
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-xs font-bold text-white">{d.id}</span>
+                      <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300 font-semibold">{d.scheme}</span>
                       <span className="text-xs text-slate-400">• {d.buyer}</span>
                       <span className="text-xs text-slate-500">• {d.time}</span>
                     </div>
                     <div className="text-xs text-slate-300 font-medium">{d.reason}</div>
                     <div className="text-xs text-slate-400 line-clamp-1">{d.summary}</div>
                     <div className="flex items-center space-x-2 pt-1">
-                      {d.ce30 && (
-                        <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded font-medium">
-                          Visa CE 3.0 Liability Shift
+                      <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded">
+                        Stage: {d.stage}
+                      </span>
+                      {d.slaUrgency === "CRITICAL_DAY_N_MINUS_1" && (
+                        <span className="text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded font-bold animate-pulse">
+                          Day N-1 Critical Window
                         </span>
                       )}
-                      {d.podVerified && (
-                        <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-medium">
-                          Carrier POD Verified
+                      {d.ce30 && (
+                        <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded font-medium">
+                          Visa CE 3.0
+                        </span>
+                      )}
+                      {d.proceduralDefect && (
+                        <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded font-medium">
+                          MC Rule Defect
                         </span>
                       )}
                     </div>
@@ -256,7 +305,7 @@ export default function App() {
                     <span className={`text-[11px] font-bold mt-1 px-2 py-0.5 rounded-full ${
                       d.recommendation === "DEFEND" 
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                     }`}>
                       {d.recommendation} ({d.winProb}%)
                     </span>
@@ -267,18 +316,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* Dossier Inspector (5 cols) */}
+          {/* Dossier Inspector */}
           <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col">
             <h3 className="font-semibold text-sm text-white flex items-center mb-4">
               <Eye className="w-4 h-4 mr-2 text-slate-400" />
-              Defense Dossier & AI Council Audit
+              Multi-Agent Representment Dossier
             </h3>
 
             {selectedDispute ? (
               <div className="space-y-4 text-xs">
                 <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="font-mono text-slate-400">{selectedDispute.id}</span>
+                    <span className="font-mono text-slate-400">{selectedDispute.id} ({selectedDispute.scheme})</span>
                     <span className="font-bold text-white text-sm">{selectedDispute.amount}</span>
                   </div>
                   <p className="text-slate-300">{selectedDispute.summary}</p>
@@ -288,31 +337,34 @@ export default function App() {
                   <div className="p-3 bg-slate-800/40 rounded-lg border border-slate-800/80">
                     <div className="font-semibold text-slate-200 mb-1 flex items-center">
                       <Cpu className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
-                      1. Triage Agent Assessment
+                      1. Triage & SLA Urgency
                     </div>
                     <div className="text-slate-400">
-                      Win Probability: <span className="text-white font-bold">{selectedDispute.winProb}%</span> • 
-                      Action: <span className="text-emerald-400 font-bold ml-1">{selectedDispute.recommendation}</span>
+                      Stage: <span className="text-white font-medium">{selectedDispute.stage}</span> • 
+                      SLA: <span className="text-amber-400 font-bold ml-1">{selectedDispute.slaUrgency}</span>
                     </div>
                   </div>
 
                   <div className="p-3 bg-slate-800/40 rounded-lg border border-slate-800/80">
                     <div className="font-semibold text-slate-200 mb-1 flex items-center">
                       <ShieldCheck className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
-                      2. Forensic Auditor Findings
+                      2. Forensic Evidence Audit
                     </div>
                     <div className="text-slate-400">
-                      Proof of Delivery (POD): <span className="text-slate-200">{selectedDispute.podVerified ? "Confirmed via USPS API" : "N/A"}</span>
+                      Carrier POD: <span className="text-slate-200">{selectedDispute.podVerified ? "Verified (USPS Signature Match)" : "None"}</span>
                     </div>
                   </div>
 
                   <div className="p-3 bg-slate-800/40 rounded-lg border border-slate-800/80">
                     <div className="font-semibold text-slate-200 mb-1 flex items-center">
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
-                      3. Card Network Compliance
+                      <Scale className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
+                      3. Card Scheme Rule Compliance
                     </div>
                     <div className="text-slate-400">
-                      Visa CE 3.0: <span className="text-slate-200">{selectedDispute.ce30 ? "Qualified (Liability Shifted)" : "Not triggered"}</span>
+                      {selectedDispute.ce30 && <span className="text-emerald-400">Visa CE 3.0 Qualified (Reason Code 10.4)</span>}
+                      {selectedDispute.proceduralDefect && <span className="text-emerald-400">Mastercard Prior Contact Rule Defect Identified</span>}
+                      {selectedDispute.arbitrationAvoided && <span className="text-rose-400">Stage 9 Scheme Arbitration $500 Penalty Deflected</span>}
+                      {!selectedDispute.ce30 && !selectedDispute.proceduralDefect && !selectedDispute.arbitrationAvoided && <span>Standard scheme guidelines apply</span>}
                     </div>
                   </div>
 

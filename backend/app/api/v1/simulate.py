@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from typing import Dict, Any
 from datetime import datetime, timedelta
 from app.models.dispute import (
-    Dispute, DisputeReason, DisputeStatus, DisputeLifeCycleStage, DisputedTransaction, Money, BuyerInfo
+    Dispute, DisputeReason, DisputeStatus, DisputeLifeCycleStage, DisputedTransaction, Money, BuyerInfo, CardScheme
 )
 from app.models.evidence import EvidencePackage, TrackingInfo, HistoricalTransaction, ImageForensicResult
 from app.agents.orchestrator import shield_orchestrator
@@ -30,7 +30,9 @@ async def simulate_inr_friendly_fraud(auto_submit: bool = False):
         reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_RECEIVED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
         dispute_amount=Money(value="149.99"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK,
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.VISA,
+        scheme_reason_code="13.1",
         buyer_info=BuyerInfo(
             name="John Doe",
             email="john.doe@example.com",
@@ -79,7 +81,9 @@ async def simulate_visa_ce30(auto_submit: bool = False):
         reason=DisputeReason.UNAUTHORISED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
         dispute_amount=Money(value="320.00"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK,
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.VISA,
+        scheme_reason_code="10.4",
         buyer_info=BuyerInfo(
             name="Sarah Jenkins",
             email="sarah.j@example.com",
@@ -117,32 +121,62 @@ async def simulate_visa_ce30(auto_submit: bool = False):
     return {"scenario": "Visa CE 3.0 Liability Shift", "dispute": dispute, "dossier": dossier}
 
 
-@router.post("/unwinnable-micro-chargeback")
-async def simulate_unwinnable_micro_chargeback(auto_submit: bool = False):
+@router.post("/mastercard-missing-contact")
+async def simulate_mastercard_missing_contact(auto_submit: bool = False):
     """
-    Scenario 3: $12 dispute with no carrier tracking.
-    Agent recognizes fighting will incur a $20 fee + guaranteed loss.
-    Recommends AUTO_CONCEDE to protect merchant fees & dispute ratio.
+    Scenario 3 (From Barclays Research): Cardholder filed chargeback via Mastercard
+    without attempting resolution with the merchant first.
+    System flags procedural defect under Mastercard scheme rules.
     """
     dispute = Dispute(
-        dispute_id="PP-D-10294",
-        create_time=datetime.utcnow() - timedelta(hours=1),
+        dispute_id="PP-D-77218",
+        create_time=datetime.utcnow() - timedelta(hours=4),
         disputed_transactions=[
             DisputedTransaction(
-                transaction_id="TXN-4910283",
-                gross_amount=Money(value="12.50"),
-                create_time=datetime.utcnow() - timedelta(days=10)
+                transaction_id="TXN-MC-8819",
+                gross_amount=Money(value="189.50"),
+                create_time=datetime.utcnow() - timedelta(days=7)
             )
         ],
         reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED,
         status=DisputeStatus.WAITING_FOR_SELLER_RESPONSE,
-        dispute_amount=Money(value="12.50"),
-        dispute_life_cycle_stage=DisputeLifeCycleStage.CHARGEBACK,
-        seller_response_due_date=datetime.utcnow() + timedelta(days=1)
+        dispute_amount=Money(value="189.50"),
+        dispute_life_cycle_stage=DisputeLifeCycleStage.MERCHANT_REPRESENTMENT,
+        scheme=CardScheme.MASTERCARD,
+        scheme_reason_code="4853",
+        buyer_contacted_merchant=False,  # Procedural defect!
+        seller_response_due_date=datetime.utcnow() + timedelta(days=5)
     )
 
-    # Empty evidence
-    evidence = EvidencePackage(dispute_id=dispute.dispute_id)
+    dossier = await shield_orchestrator.defend_dispute(dispute, None, force_auto_submit=auto_submit)
+    return {"scenario": "Mastercard Missing Contact Defect", "dispute": dispute, "dossier": dossier}
 
-    dossier = await shield_orchestrator.defend_dispute(dispute, evidence, force_auto_submit=auto_submit)
-    return {"scenario": "Unwinnable Micro-Chargeback", "dispute": dispute, "dossier": dossier}
+
+@router.post("/scheme-arbitration-risk")
+async def simulate_scheme_arbitration_risk(auto_submit: bool = False):
+    """
+    Scenario 4 (From Barclays Stage 9 Research): Dispute reaches Scheme Arbitration stage.
+    Dispute is for $75. Loser faces a $500 scheme arbitration fee.
+    Triage calculates negative EV and recommends CONCEDE_ARBITRATION to save $500!
+    """
+    dispute = Dispute(
+        dispute_id="PP-D-55102",
+        create_time=datetime.utcnow() - timedelta(days=35),
+        disputed_transactions=[
+            DisputedTransaction(
+                transaction_id="TXN-ARB-11",
+                gross_amount=Money(value="75.00"),
+                create_time=datetime.utcnow() - timedelta(days=40)
+            )
+        ],
+        reason=DisputeReason.MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED,
+        status=DisputeStatus.UNDER_REVIEW,
+        dispute_amount=Money(value="75.00"),
+        dispute_life_cycle_stage=DisputeLifeCycleStage.SCHEME_ARBITRATION,
+        scheme=CardScheme.VISA,
+        scheme_reason_code="13.3",
+        seller_response_due_date=datetime.utcnow() + timedelta(hours=18)  # Critical Day N-1 window!
+    )
+
+    dossier = await shield_orchestrator.defend_dispute(dispute, None, force_auto_submit=auto_submit)
+    return {"scenario": "Scheme Arbitration Risk Triage", "dispute": dispute, "dossier": dossier}

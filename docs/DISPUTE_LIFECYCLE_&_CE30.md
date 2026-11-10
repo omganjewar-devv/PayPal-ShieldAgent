@@ -1,64 +1,43 @@
-# Understanding Disputes, Friendly Fraud, and Visa CE 3.0
+# Card Scheme Dispute Lifecycle, Reason Codes & Scheme Rules
 
-This guide provides the core domain knowledge behind **ShieldAgent**.
+This document outlines the end-to-end chargeback lifecycle under **Visa and Mastercard Scheme Rules** (as processed by issuers like Barclays, Chase, and acquirers/payment facilitators like **PayPal**).
 
----
-
-## 1. What is Friendly Fraud?
-
-**Friendly Fraud** (also called "first-party fraud") occurs when a consumer makes a legitimate purchase with their own credit card or PayPal account, but later files a dispute with their issuing bank or PayPal claiming:
-- *"I didn't authorize this payment"* (Unauthorized Transaction / Fraud code)
-- *"The package never arrived"* (Item Not Received / INR)
-- *"The item arrived completely damaged or not as described"* (Significantly Not As Described / SNAD)
-
-### Why is Friendly Fraud a \$100B Problem?
-1. **Asymmetric Friction:** Banking apps now allow cardholders to contest a charge with one tap.
-2. **Merchant Loss Multiplier:** When a merchant loses a \$100 dispute, they lose:
-   - The \$100 original sale
-   - The wholesale cost of goods sold (COGS)
-   - Shipping & fulfillment costs
-   - A non-refundable **\$15–\$25 dispute fee** charged by the payment processor/network
-   - Negative impact on the merchant's chargeback ratio (exceeding 0.9% can lead to account suspension or card network fines).
+![Barclays Chargeback Scheme Flow](barclays_chargeback_scheme_flow.jpg)
 
 ---
 
-## 2. Card Network Rules: Visa Compelling Evidence 3.0 (CE 3.0)
+## 1. The 10-Stage Scheme Dispute Lifecycle
 
-Introduced in April 2023, **Visa CE 3.0** is the most powerful weapon against friendly fraud for code `10.4` (Other Fraud - Card-Absent Environment).
+The dispute process runs strictly on card network rules (Visa VROL and Mastercard Mastercom). Issuers cannot alter these rules.
 
-### The CE 3.0 Rule:
-If a merchant can demonstrate that the customer previously made **at least two undisputed purchases** using the same payment credential (card), where:
-1. Both prior transactions occurred between **120 days and 365 days** prior to the dispute date.
-2. The disputed transaction shares at least **ONE** of the following core identifiers with both prior transactions:
-   - **IP Address**
-   - **Device ID / Fingerprint**
-   - **Physical Shipping Address**
-
-### The Result:
-* Under Visa rules, proving CE 3.0 **shifts fraud liability back to the issuer immediately**.
-* The merchant **wins the dispute automatically** before formal pre-arbitration.
-* ShieldAgent's **Compliance Agent** automates this exact historical query in real time.
+| Stage | Scheme Action | Manual Bottlenecks & Failure Modes | ShieldAgent Automated Countermeasure |
+| :--- | :--- | :--- | :--- |
+| **1. Dispute Intake** | Cardholder reports fraud, INR, or SNAD | Unclear dispute classification; missed duplicate charges | Schema normalization & PayPal reason code parsing |
+| **2. Triage & Eligibility** | Reason code assigned; time limits evaluated | Manual deadline calculation; wrong reason codes picked | Staggered Scheme SLA Engine (Day N-1 boundary alerts) |
+| **3. Evidence Gathering** | Cardholder / merchant submits receipts, courier proofs | Mixed unstructured formats (PDFs, screenshots, emails); missing proof of merchant contact | Automated OCR, carrier POD tracking, and contact log verification |
+| **4. First Chargeback** | Submitted to scheme (VROL / Mastercom) | Re-keying data between core banking & portals; missed filing windows | PayPal webhook listener (`CUSTOMER.DISPUTE.CREATED`) |
+| **5. Merchant Representment** | Merchant / acquirer defends with evidence dossier | Notices sent to stale addresses; manual spreadsheet tracking | Autonomous dossier generator (`representment_agent.py`) |
+| **6. Issuer / Review** | Reviewer tests if defense complies with scheme rules | Analyst judgment variance; outdated rule checklists (e.g., missing CE 3.0) | Automated **Visa CE 3.0** liability shift certification |
+| **7. Pre-Arbitration** | Further evidence exchanged; escalated dispute | Incomplete customer prompts; weak case audit logs | Structured immutable case audit trail |
+| **8. Resolution Point** | Merchant accepts liability or contests | Subjective human decision | Expected Value (EV) calculator for optimal decision |
+| **9. Scheme Arbitration** | Official Visa/Mastercard ruling; **loser pays $500+ fee** | Costly when poorly prepared; high penalty risk | **Arbitration Risk Engine:** Evaluates EV vs $500 fee before filing |
+| **10. Closure** | Financial credit/debit posted; case resolved | Manual reconciliation; Ombudsman complaints | Automated webhook execution via PayPal Disputes API |
 
 ---
 
-## 3. PayPal Disputes & Resolution Stages
+## 2. Mastercard Scheme Rule: Mandatory Prior Merchant Contact
 
-PayPal classifies disputes into distinct phases:
+Under **Mastercard Rules (Reason Codes 4853 & 4837)**:
+* Cardholders filing commercial disputes (e.g., Not as Described, Defective Merchandise, Billing Errors) **must first attempt resolution with the merchant directly**.
+* If an issuer files a chargeback without proof of prior contact, the case suffers from a **procedural scheme defect**.
+* **ShieldAgent's Compliance Engine** inspects the customer support and order timeline. If no prior contact occurred, ShieldAgent generates an immediate procedural refutation, forcing liability shift back to the issuer.
 
-```
-[ INQUIRY / DISPUTE ] 
-   └── Buyer opens dispute in PayPal Resolution Center.
-   └── 20 days to communicate and resolve amicably.
-         │
-         ▼
-[ CLAIM ]
-   └── Escalated to PayPal to make a formal decision.
-   └── Merchant has ~10 days to submit evidence.
-         │
-         ▼
-[ CHARGEBACK ]
-   └── Buyer contacted their credit card issuer directly (Visa, Mastercard, Amex).
-   └── Card network rules apply. Merchant has strict 7–10 day SLA to provide representment.
-```
+---
 
-ShieldAgent interfaces directly with PayPal's `/v1/customer/disputes` endpoints to automate evidence submission across all these stages.
+## 3. Scheme Arbitration Risk ($500 Fee Protection)
+
+In Stage 9 (Scheme Arbitration), formal card network filing costs \$500+ in non-refundable arbitration fees for the losing party.
+* Defending a \$60 dispute at arbitration with a 60% win probability has a **negative expected value** ($-\$188$).
+* ShieldAgent's **Arbitration Go/No-Go Decision Engine** calculates:
+  $$\text{EV} = (P_{\text{win}} \times \text{Amount}) - ((1 - P_{\text{win}}) \times (\text{Amount} + \$500))$$
+* If $\text{EV} < 0$, ShieldAgent autonomously advises `CONCEDE_ARBITRATION`, saving the merchant the \$500 fee and protecting their card scheme standing.
