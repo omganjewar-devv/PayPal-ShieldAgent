@@ -1,0 +1,27 @@
+services:
+  # FastAPI Backend
+  - type: web
+    name: shieldagent-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PAYPAL_ENV
+        value: sandbox
+
+  # React Frontend Dashboard
+  - type: web
+    name: shieldagent-dashboard
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: "./frontend/dist"
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
